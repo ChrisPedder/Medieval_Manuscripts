@@ -141,7 +141,7 @@ def write_all_MS_data_to_jpg():
                          element[-5].isalpha()]
     
     
-    output_folder = str(root.parent.parent) + '/' + 'data/processed/MS157' + '/'
+    output_folder = str(root.parent.parent) + '/' + 'data/interim/MS157' + '/'
     
     #check output directory exists, if not create it
     if not os.path.exists(output_folder):
@@ -185,10 +185,13 @@ def write_all_CLaMM_data_to_jpg():
     # get list of files in the raw data directory
     root = Path.cwd()
     input_folder = str(root.parent.parent) + '/' + 'data/raw/ICDAR2017_CLaMM_Training' + '/'
-    clamm_list = sorted(glob.glob(input_folder + '*.jpg'))[:500]
+    clamm_list = sorted(glob.glob(input_folder + '*.tif'))[:500]
     # keep only the first 500 entries
+    print(root)
+    print(input_folder)
+    print(clamm_list)
         
-    output_folder = str(root.parent.parent) + '/' + 'data/processed/CLaMM' + '/'
+    output_folder = str(root.parent.parent) + '/' + 'data/interim/CLaMM' + '/'
     
     #check output directory exists, if not create it
     if not os.path.exists(output_folder):
@@ -201,7 +204,7 @@ def write_all_CLaMM_data_to_jpg():
 
         for i in range(len(new_tile_list)):
             # define file names for training example
-            tile_file_name = output_folder + '/CLaMM'+str(counter + i)+'.jpg'
+            tile_file_name = output_folder + 'CLaMM'+str(counter + i)+'.jpg'
 
             # write three copies of the grayscale image to three separate
             # layers as the VGG16 net expects an RGB input
@@ -227,8 +230,8 @@ def generate_train_test_split_files(train_test_split, set_size):
 
     # get list of files in the raw data directory
     root = Path.cwd()
-    MS_folder = str(root.parent.parent) + '/' + 'data/processed/MS157' + '/'
-    CLaMM_folder = str(root.parent.parent) + '/' + 'data/processed/CLaMM' + '/'
+    MS_folder = str(root.parent.parent) + '/' + 'data/interim/MS157' + '/'
+    CLaMM_folder = str(root.parent.parent) + '/' + 'data/interim/CLaMM' + '/'
 
     print(MS_folder, CLaMM_folder)
     
@@ -236,7 +239,9 @@ def generate_train_test_split_files(train_test_split, set_size):
     MS_sample_list = random.sample(glob.glob(MS_folder + '/*'), set_size)
     CLaMM_sample_list = random.sample(glob.glob(CLaMM_folder + '/*'),
                                      set_size)
-
+    
+    print(MS_sample_list, CLaMM_sample_list)
+    
     MS_tr_files = []
     CLaMM_tr_files = []
     for i in range(split):
@@ -249,9 +254,7 @@ def generate_train_test_split_files(train_test_split, set_size):
         MS_te_files.append(MS_sample_list[i])
         CLaMM_te_files.append(CLaMM_sample_list[i])
 
-    return MS_folder, CLaMM_folder, MS_tr_files, CLaMM_tr_files,\
-MS_te_files, CLaMM_te_files
-    return
+    return [MS_tr_files, MS_te_files, CLaMM_tr_files, CLaMM_te_files]
 
 def add_path(string):
     """
@@ -268,7 +271,8 @@ def generate_target_train_test_directories():
     copied train/test split files    
     """
 
-    target_list = ['data/processed/train/MS157', 'data/processed/test/MS157',\
+    target_list = ['data/processed/train', 'data/processed/test',\
+                   'data/processed/train/MS157', 'data/processed/test/MS157',\
                    'data/processed/train/CLaMM', 'data/processed/test/CLaMM']
 
     train_test_directories = []
@@ -282,33 +286,24 @@ def do_train_test_split(split, set_size):
     Do train-test split of data into subfolders required for Keras 
     retraining format.
     """
+        
+    file_locations = generate_train_test_split_files(split, set_size)
     
-    MS_folder, CLaMM_folder, MS_tr_files, CLaMM_tr_files, MS_te_files,\
-    CLaMM_te_files = generate_train_test_split_files(split, set_size)
-    
-    # generate list of target directories to copy files to
-    MS_train_data_path, MS_test_data_path, CLaMM_train_data_path,\
-    CLaMM_test_data_path = generate_target_train_test_directories()
+    print("File locations is a list with {} entries".format(len(file_locations)))
 
-    path_list = [MS_train_data_path, MS_test_data_path, CLaMM_train_data_path, 
-                 CLaMM_test_data_path]
+    # generate list of target directories to copy files to
+    path_list = generate_target_train_test_directories()
+
     #check chosen directory exists, if not create it
     for path in path_list:
         if not os.path.exists(path):
             os.mkdir(path)
 
     # copy files to train and test directories
-    for filename in MS_tr_files:
-        shutil.copy2(filename, MS_train_data_path) 
-
-    for filename in CLaMM_tr_files:
-        shutil.copy2(filename, CLaMM_train_data_path) 
-
-    for filename in MS_te_files:
-        shutil.copy2(filename, MS_test_data_path) 
-
-    for filename in CLaMM_te_files:
-        shutil.copy2(filename, CLaMM_test_data_path) 
+    for i in range(4):
+        for filename in file_locations[i]:
+            shutil.copy2(filename, path_list[i+2])
+            print("File named {} copied to directory {}".format(filename, file_locations[i]))
 
     return
 
@@ -320,7 +315,7 @@ def Main():
                         size of the training set', type = float)
 
     parser.add_argument('set_size', help = 'The number of images from each\
-                        training set to use', type = float)
+                        training set to use', type = int)
 
 
     args = parser.parse_args()
