@@ -26,12 +26,10 @@ import glob
 # Machine learning libraries
 import keras
 from keras import applications, optimizers, regularizers
-from keras.callbacks import ModelCheckpoint, TensorBoard
-
+from keras.callbacks import ModelCheckpoint
 from keras.models import Sequential, Model
 from keras.layers import Dense, Dropout, Flatten, Input
 from keras.applications.vgg16 import VGG16 
-
 from keras.preprocessing.image import ImageDataGenerator
 
 IM_HEIGHT = 300
@@ -42,10 +40,10 @@ SEED = 42
 random.seed(SEED)
 
 # User-defined model hyperparameters
-epochs = 150
-epochs2 = 10
-batch_size = 40
-l1_norm_weight = 0.0001
+EPOCHS = 150
+EPOCHS2 = 10
+BATCH_SIZE = 40
+L1_NORM_WEIGHT = 0.0001
 
 ### Do train/test split of dataset for training purposes, retain specific
 ### split used for future use/investigation
@@ -159,12 +157,12 @@ def create_log_weights_file_names(set_size):
     date = get_date_string()
     
     log_file_name = 'logfile' + '_setsize_' + str(set_size) + '_e1_' +\
-    str(epochs) + '_e2_' + str(epochs2) + '_bs_' + str(batch_size) +\
-    '_l1_' + str(l1_norm_weight) + '_' + date
+    str(EPOCHS) + '_e2_' + str(EPOCHS2) + '_bs_' + str(BATCH_SIZE) +\
+    '_l1_' + str(L1_NORM_WEIGHT) + '_' + date
     
     weight_file_name = 'weights' + '_setsize_' + str(set_size) + '_e1_' +\
-    str(epochs) + '_e2_' + str(epochs2) + '_bs_' + str(batch_size) +\
-    '_l1_' + str(l1_norm_weight) + '_' + date
+    str(EPOCHS) + '_e2_' + str(EPOCHS2) + '_bs_' + str(BATCH_SIZE) +\
+    '_l1_' + str(L1_NORM_WEIGHT) + '_' + date
     
     return log_file_name, weight_file_name
 
@@ -191,10 +189,10 @@ def create_log_weights_file_paths():
 def write_hyperparameters_to_json(set_size):
     hyperparams_dictionary = {}
     hyperparams_dictionary['nb_training_samples'] = 2 * set_size
-    hyperparams_dictionary['epochs'] = epochs
-    hyperparams_dictionary['epochs_2'] = epochs2
-    hyperparams_dictionary['batch_size'] = batch_size
-    hyperparams_dictionary['l1_norm_weight'] = l1_norm_weight
+    hyperparams_dictionary['epochs'] = EPOCHS
+    hyperparams_dictionary['epochs_2'] = EPOCHS2
+    hyperparams_dictionary['batch_size'] = BATCH_SIZE
+    hyperparams_dictionary['l1_norm_weight'] = L1_NORM_WEIGHT
     
     log_path = create_log_weights_file_paths()[0]
         
@@ -346,7 +344,7 @@ def train_top_model(split, nb_samples, epochs, batch_size, l1_norm_weight):
 #              callbacks = [checkpointer, tensorboard])
 
 
-def retrain_vgg_network(split, nb_samples, batch_size, l1_norm_weight):    
+def retrain_vgg_network(split, nb_samples, batch_size, l1_norm_weight, epochs2):    
     
     nb_training_features, nb_test_features, train_features_path,\
     test_features_path = get_training_validation_features(split, nb_samples)
@@ -418,7 +416,8 @@ def Main():
                         size of the training set', type = float)
 
     parser.add_argument('set_size', help = 'The number of images from each\
-                        training set to use', type = int)
+                        training set to use. NB set_size * split_size should\
+                        be chosen to be exactly divisible by two!', type = int)
 
 
     args = parser.parse_args()
@@ -435,9 +434,11 @@ def Main():
 
     save_bottleneck_features(train_test_split, nb_samples, batch_size)
     
-    train_top_model(train_test_split, nb_samples, epochs, batch_size, l1_norm_weight)
+    train_top_model(train_test_split, nb_samples, epochs, batch_size,
+                    l1_norm_weight)
 
-    retrain_vgg_network(train_test_split, nb_samples, batch_size, l1_norm_weight)
+    retrain_vgg_network(train_test_split, nb_samples, batch_size,
+                        l1_norm_weight, epochs2)
 
     return
 
