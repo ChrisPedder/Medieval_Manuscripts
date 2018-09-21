@@ -232,29 +232,27 @@ def get_training_validation_features(train_test_split, set_size):
     
     nb_test_features = set_size - nb_training_features
     
-    return nb_training_features, nb_test_features
-
-def save_bottleneck_features(split, set_size, batch_size):
-    
     # path to the model weights files.
     root_path = Path.cwd()
-    
-#    VGG_weights_path = str(root_path.parent.parent)+'/data/vgg16_weights.h5'
-    
+
     train_features_path = str(root_path.parent.parent) + '/data/processed/' + 'set_size_'\
     + str(set_size) + '_train/'
 
     test_features_path = str(root_path.parent.parent) + '/data/processed/' + 'set_size_'\
     + str(set_size) + '_test/'
     
+    return nb_training_features, nb_test_features, train_features_path, test_features_path
+
+def save_bottleneck_features(split, set_size, batch_size):
+        
     # Data augmentation using affine transformations etc.
     datagen = ImageDataGenerator(rescale=1. / 255)
 
-    # build the VGG16 network with false colour start - #TODO model building as subfunction
+    # build the VGG16 network with false colour start 
     model = applications.VGG16(weights='imagenet', include_top=False)
     
-    nb_training_features, nb_test_features = get_training_validation_features(split, 
-                                                                              set_size)
+    nb_training_features, nb_test_features, train_features_path,\
+    test_features_path = get_training_validation_features(split, set_size)
     
     if not any(fname.endswith('.npy') for fname in os.listdir(train_features_path)):
         # Augmentation generator using flow_from_directory
@@ -296,7 +294,7 @@ def save_bottleneck_features(split, set_size, batch_size):
               size. Using previously created version')
 
 
-def build_classifier_model(data_shape):
+def build_classifier_model(data_shape, l1_norm_weight):
     model = Sequential()
     model.add(Flatten(input_shape=data_shape))
     model.add(Dense(256, activation='relu', kernel_regularizer=regularizers.l1(l1_norm_weight)))
@@ -305,16 +303,20 @@ def build_classifier_model(data_shape):
     return model
 
 # Train small discriminator model on the feature maps from VGG16 saved above
-def train_top_model():
-    train_data = np.load(open('bottleneck_features_train_filter','rb'))
+def train_top_model(split, set_size, epochs, batch_size, l1_norm_weight):
+    
+    nb_training_features, nb_test_features, train_features_path,\
+    test_features_path = get_training_validation_features(split, set_size)
+
+    train_data = np.load(open(train_features_path + 'bottleneck_features_train','rb'))
     train_labels = np.array(
-        [0] * (nb_train_samples // 2) + [1] * (nb_train_samples // 2))
+        [0] * (nb_training_features // 2) + [1] * (nb_training_features // 2))
 
-    validation_data = np.load(open('bottleneck_features_validation_filter','rb'))
+    validation_data = np.load(open(test_features_path + 'bottleneck_features_test','rb'))
     validation_labels = np.array(
-        [0] * (nb_validation_samples // 2) + [1] * (nb_validation_samples // 2))
+        [0] * (nb_test_features // 2) + [1] * (nb_test_features // 2))
 
-    model = build_classifier_model(train_data.shape[1:])
+    model = build_classifier_model(train_data.shape[1:], l1_norm_weight)
 
     model.compile(optimizer='rmsprop',
                   loss='binary_crossentropy', metrics=['accuracy'])
@@ -322,12 +324,15 @@ def train_top_model():
     checkpointer = keras.callbacks.ModelCheckpoint(top_model_weights_path, monitor='val_acc', 
                                                    verbose=1, save_best_only=True, 
                                                    save_weights_only=True)
+    
+    tensorboard = TensorBoard(log_dir="logs/{}".format(time()))
+
 
     model.fit(train_data, train_labels,
               epochs=epochs,
               batch_size=batch_size,
               validation_data=(validation_data, validation_labels),
-              callbacks = [checkpointer])
+              callbacks = [checkpointer, tensorboard])
 
 #save_bottleneck_features()
 #train_top_model()
@@ -412,6 +417,9 @@ def Main():
     epochs, epochs2, batch_size, l1_norm_weight = read_hyperparameters_from_json(set_size)
 
     save_bottleneck_features(train_test_split, set_size, batch_size)
+    
+    train_top_model(split, set_size, epochs, batch_size, l1_norm_weight)
+
     
     return
 
