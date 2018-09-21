@@ -17,7 +17,6 @@ from PIL import Image
 import scipy.ndimage
 
 # File IO libraries
-import shutil
 import glob
 from pathlib import Path
 import os
@@ -187,9 +186,6 @@ def write_all_CLaMM_data_to_jpg():
     input_folder = str(root.parent.parent) + '/' + 'data/raw/ICDAR2017_CLaMM_Training' + '/'
     clamm_list = sorted(glob.glob(input_folder + '*.tif'))[:500]
     # keep only the first 500 entries
-    print(root)
-    print(input_folder)
-    print(clamm_list)
         
     output_folder = str(root.parent.parent) + '/' + 'data/interim/CLaMM' + '/'
     
@@ -224,110 +220,12 @@ def write_all_CLaMM_data_to_jpg():
 
     return 
 
-def generate_train_test_split_files(train_test_split, set_size):
-    # Set size of train-test split
-    split = round((1-train_test_split) * set_size)
-
-    # get list of files in the raw data directory
-    root = Path.cwd()
-    MS_folder = str(root.parent.parent) + '/' + 'data/interim/MS157' + '/'
-    CLaMM_folder = str(root.parent.parent) + '/' + 'data/interim/CLaMM' + '/'
-
-    print(MS_folder, CLaMM_folder)
-    
-    # take random sample of size SET_SIZE from examples
-    MS_sample_list = random.sample(glob.glob(MS_folder + '/*'), set_size)
-    CLaMM_sample_list = random.sample(glob.glob(CLaMM_folder + '/*'),
-                                     set_size)
-    
-    print(MS_sample_list, CLaMM_sample_list)
-    
-    MS_tr_files = []
-    CLaMM_tr_files = []
-    for i in range(split):
-        MS_tr_files.append(MS_sample_list[i])
-        CLaMM_tr_files.append(CLaMM_sample_list[i])
-
-    MS_te_files = []
-    CLaMM_te_files = []
-    for i in range(split,set_size):
-        MS_te_files.append(MS_sample_list[i])
-        CLaMM_te_files.append(CLaMM_sample_list[i])
-
-    return [MS_tr_files, MS_te_files, CLaMM_tr_files, CLaMM_te_files]
-
-def add_path(string):
-    """
-    Helper function for following routine to generate list of train/test
-    target directories required by Keras...
-    """
-    root = Path.cwd()
-    top_path = str(root.parent.parent)
-    return top_path + '/' + string + '/'
-
-def generate_target_train_test_directories():
-    """
-    Create set of routines for making a list of the target directories for
-    copied train/test split files    
-    """
-
-    target_list = ['data/processed/train', 'data/processed/test',\
-                   'data/processed/train/MS157', 'data/processed/test/MS157',\
-                   'data/processed/train/CLaMM', 'data/processed/test/CLaMM']
-
-    train_test_directories = []
-    for extension in target_list:
-        train_test_directories.append(add_path(extension))
-
-    return train_test_directories
-
-def do_train_test_split(split, set_size):
-    """
-    Do train-test split of data into subfolders required for Keras 
-    retraining format.
-    """
-        
-    file_locations = generate_train_test_split_files(split, set_size)
-    
-    print("File locations is a list with {} entries".format(len(file_locations)))
-
-    # generate list of target directories to copy files to
-    path_list = generate_target_train_test_directories()
-
-    #check chosen directory exists, if not create it
-    for path in path_list:
-        if not os.path.exists(path):
-            os.mkdir(path)
-
-    # copy files to train and test directories
-    for i in range(4):
-        for filename in file_locations[i]:
-            shutil.copy2(filename, path_list[i+2])
-            print("File named {} copied to directory {}".format(filename, file_locations[i]))
-
-    return
 
 def Main():
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('split_size', help = 'The size of the holdout test set used\
-                        to quantify model performance as a fraction of the total\
-                        size of the training set', type = float)
-
-    parser.add_argument('set_size', help = 'The number of images from each\
-                        training set to use', type = int)
-
-
-    args = parser.parse_args()
-
-    train_test_split = args.split_size
-    set_size = args.set_size
-
     write_all_MS_data_to_jpg()
     write_all_CLaMM_data_to_jpg()
-    
-    do_train_test_split(train_test_split, set_size)
-    
+        
     return
 
 if __name__ == '__main__':
