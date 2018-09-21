@@ -212,13 +212,12 @@ def read_hyperparameters_from_json(set_size):
     
 ### Start deep learning
 
-
 # path to the model weights files.
-#weights_path = str(root_path)+'/data/vgg16_weights.h5'
+#root_path = Path.cwd()
+#weights_path = str(root_path.parent.parent)+'/data/vgg16_weights.h5'
+#train_bottleneck_features_path = str(root_path.parent.parent) + '/data/processed/' + 'set_size_'\
+#+ str(set_size) + '_train'
 #top_model_weights_path = str(root_path)+'/data/bottleneck_fc_model.h5'
-
-# dimensions of our images.
-img_height, img_width = IM_HEIGHT, IM_WIDTH
 
 # Training and testing data directories
 #train_data_dir = str(root_path)+'/data/processed/train'
@@ -227,41 +226,75 @@ img_height, img_width = IM_HEIGHT, IM_WIDTH
 # Train small network on top of VGG16
 
 # Save files containing the feature map data for training and test sets from running VGG16
-def save_bottleneck_features():
+def get_training_validation_features(train_test_split, set_size):
+    
+    nb_training_features = round((1-train_test_split) * set_size)
+    
+    nb_test_features = set_size - nb_training_features
+    
+    return nb_training_features, nb_test_features
+
+def save_bottleneck_features(split, set_size, batch_size):
+    
+    # path to the model weights files.
+    root_path = Path.cwd()
+    
+#    VGG_weights_path = str(root_path.parent.parent)+'/data/vgg16_weights.h5'
+    
+    train_features_path = str(root_path.parent.parent) + '/data/processed/' + 'set_size_'\
+    + str(set_size) + '_train/'
+
+    test_features_path = str(root_path.parent.parent) + '/data/processed/' + 'set_size_'\
+    + str(set_size) + '_test/'
     
     # Data augmentation using affine transformations etc.
     datagen = ImageDataGenerator(rescale=1. / 255)
 
     # build the VGG16 network with false colour start - #TODO model building as subfunction
     model = applications.VGG16(weights='imagenet', include_top=False)
-
-    # Augmentation generator using flow_from_directory
-    generator = datagen.flow_from_directory(
-        train_data_dir,
-        target_size=(img_height, img_width),
-        batch_size=batch_size,
-        class_mode=None,
-        shuffle=False)
-    bottleneck_features_train = model.predict_generator(
-        generator, nb_train_samples // batch_size)
     
-    # Save bottleneck features for training images so we don't have to rerun VGG16
-    np.save(open('bottleneck_features_train_filter','wb'),
-            bottleneck_features_train)
+    nb_training_features, nb_test_features = get_training_validation_features(split, 
+                                                                              set_size)
+    
+    if not any(fname.endswith('.npy') for fname in os.listdir(train_features_path)):
+        # Augmentation generator using flow_from_directory
+        generator = datagen.flow_from_directory(
+                train_features_path,
+                target_size=(IM_HEIGHT, IM_WIDTH),
+                batch_size=batch_size,
+                class_mode=None,
+                shuffle=False)
+        bottleneck_features_train = model.predict_generator(
+                generator, nb_training_features // batch_size)
+    
+        # Save bottleneck features for training images so we don't have to rerun VGG16
+        np.save(open(train_features_path + 'bottleneck_features_train','wb'),
+                bottleneck_features_train)
 
-    generator = datagen.flow_from_directory(
-        validation_data_dir,
-        target_size=(img_height, img_width),
-        batch_size=batch_size,
-        class_mode=None,
-        shuffle=False) 
+    else:
+        print('Bottleneck training set features already saved for this sample\
+              size. Using previously created version')
+        
+    if not any(fname.endswith('.npy') for fname in os.listdir(test_features_path)):
 
-    bottleneck_features_validation = model.predict_generator(
-        generator, nb_validation_samples // batch_size)
+        generator = datagen.flow_from_directory(
+                test_features_path,
+                target_size=(IM_HEIGHT, IM_WIDTH),
+                batch_size=batch_size,
+                class_mode=None,
+                shuffle=False) 
 
-    # Save bottleneck features for training images so we don't have to rerun VGG16
-    np.save(open('bottleneck_features_validation_filter','wb'),
-            bottleneck_features_validation)
+        bottleneck_features_test = model.predict_generator(
+                generator, nb_test_features // batch_size)
+        
+        # Save bottleneck features for training images so we don't have to rerun VGG16
+        np.save(open(test_features_path + 'bottleneck_features_test','wb'),
+                bottleneck_features_test)
+
+    else:
+        print('Bottleneck test set features already saved for this sample\
+              size. Using previously created version')
+
 
 def build_classifier_model(data_shape):
     model = Sequential()
@@ -376,8 +409,10 @@ def Main():
     
     write_hyperparameters_to_json(set_size)
     
-    print(read_hyperparameters_from_json(set_size))
+    epochs, epochs2, batch_size, l1_norm_weight = read_hyperparameters_from_json(set_size)
 
+    save_bottleneck_features(train_test_split, set_size, batch_size)
+    
     return
 
 if __name__ == '__main__':
