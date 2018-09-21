@@ -346,13 +346,22 @@ def train_top_model(split, nb_samples, epochs, batch_size, l1_norm_weight):
 #              callbacks = [checkpointer, tensorboard])
 
 
-def retrain_vgg_network():    
-    input_tensor = Input(shape=(300,300,3))
-    base_model = VGG16(weights='imagenet',include_top= False,input_tensor=input_tensor)
+def retrain_vgg_network(split, nb_samples, batch_size, l1_norm_weight):    
+    
+    nb_training_features, nb_test_features, train_features_path,\
+    test_features_path = get_training_validation_features(split, nb_samples)
+    
+    log_path, weights_path = create_log_weights_file_paths()
+        
+    _, weights_file_name = create_log_weights_file_names(nb_samples//2)
+
+    input_tensor = Input(shape=(IM_HEIGHT, IM_WIDTH, 3))
+    base_model = VGG16(weights='imagenet', include_top= False, 
+                       input_tensor=input_tensor)
     print('Model loaded.')
 
-    top_model = build_classifier_model(base_model.output_shape[1:])
-    top_model.load_weights(top_model_weights_path)
+    top_model = build_classifier_model(base_model.output_shape[1:], l1_norm_weight)
+    top_model.load_weights(weights_path + weights_file_name)
 
     model = Model(input= base_model.input, output= top_model(base_model.output))
 
@@ -360,10 +369,8 @@ def retrain_vgg_network():
         layer.trainable = False
 
     print(model.summary())
-
-## compile the model with a SGD/momentum optimizer
-## and a very slow learning rate.
-
+    
+    ## compile the model with a SGD/momentum optimizer and a slow learning rate.
     model.compile(loss='binary_crossentropy',
                   optimizer=optimizers.SGD(lr=1e-4, momentum=0.9),
                   metrics=['accuracy'])
@@ -378,24 +385,24 @@ def retrain_vgg_network():
     test_datagen = ImageDataGenerator(rescale=1. / 255)
     
     train_generator = train_datagen.flow_from_directory(
-            train_data_dir,
-            target_size=(img_height, img_width),
+            train_features_path,
+            target_size=(IM_HEIGHT, IM_WIDTH),
             batch_size=batch_size,
             class_mode='binary') 
 
     validation_generator = test_datagen.flow_from_directory(
-            validation_data_dir,
-            target_size=(img_height, img_width),
+            test_features_path,
+            target_size=(IM_HEIGHT, IM_WIDTH),
             batch_size=batch_size,
             class_mode='binary') 
 
-    checkpointer = ModelCheckpoint(filepath='check_weights.hdf5', verbose=1, 
+    checkpointer = ModelCheckpoint(filepath=weights_path + weights_file_name + 'retrained', verbose=1, 
                                    monitor='val_acc', save_best_only=True)
 
     # fine-tune the model
     model.fit_generator(
             train_generator,
-            steps_per_epoch = nb_train_samples//batch_size,
+            steps_per_epoch = nb_training_features//batch_size,
             epochs=epochs2,
             validation_data = validation_generator,
             verbose=1,
@@ -430,7 +437,8 @@ def Main():
     
     train_top_model(train_test_split, nb_samples, epochs, batch_size, l1_norm_weight)
 
-    
+    retrain_vgg_network(train_test_split, nb_samples, batch_size, l1_norm_weight)
+
     return
 
 if __name__ == '__main__':
