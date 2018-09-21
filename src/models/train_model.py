@@ -42,9 +42,9 @@ SEED = 42
 random.seed(SEED)
 
 # User-defined model hyperparameters
-epochs = 50
+epochs = 150
 epochs2 = 10
-batch_size = 20
+batch_size = 40
 l1_norm_weight = 0.0001
 
 ### Do train/test split of dataset for training purposes, retain specific
@@ -215,34 +215,35 @@ def read_hyperparameters_from_json(set_size):
     with open(log_file_path + log_file_name + '.json') as f:
         data = json.load(f)
     
+    nb_samples = data['nb_training_samples']
     epochs = data['epochs']
     epochs2 = data['epochs_2']
     batch_size = data['batch_size']
     l1_norm_weight = data['l1_norm_weight']
     
-    return epochs, epochs2, batch_size, l1_norm_weight
+    return nb_samples, epochs, epochs2, batch_size, l1_norm_weight
     
 ### Start deep learning
 
 # Save files containing the feature map data for training and test sets from running VGG16
-def get_training_validation_features(train_test_split, set_size):
+def get_training_validation_features(train_test_split, nb_samples):
     
-    nb_training_features = round((1-train_test_split) * set_size)
+    nb_training_features = round((1-train_test_split) * nb_samples)
     
-    nb_test_features = set_size - nb_training_features
+    nb_test_features = nb_samples - nb_training_features
     
     # path to the model weights files.
     root_path = Path.cwd()
 
     train_features_path = str(root_path.parent.parent) + '/data/processed/' + 'set_size_'\
-    + str(set_size) + '/train/'
+    + str(nb_samples//2) + '/train/'
 
     test_features_path = str(root_path.parent.parent) + '/data/processed/' + 'set_size_'\
-    + str(set_size) + '/test/'
+    + str(nb_samples//2) + '/test/'
     
     return nb_training_features, nb_test_features, train_features_path, test_features_path
 
-def save_bottleneck_features(split, set_size, batch_size):
+def save_bottleneck_features(split, nb_samples, batch_size):
         
     # Data augmentation using affine transformations etc.
     datagen = ImageDataGenerator(rescale=1. / 255)
@@ -251,7 +252,7 @@ def save_bottleneck_features(split, set_size, batch_size):
     model = applications.VGG16(weights='imagenet', include_top=False)
     
     nb_training_features, nb_test_features, train_features_path,\
-    test_features_path = get_training_validation_features(split, set_size)
+    test_features_path = get_training_validation_features(split, nb_samples)
     
     if not any(fname.endswith('.npy') for fname in os.listdir(train_features_path)):
         # Augmentation generator using flow_from_directory
@@ -304,14 +305,14 @@ def build_classifier_model(data_shape, l1_norm_weight):
     return model
 
 # Train small discriminator model on the feature maps from VGG16 saved above
-def train_top_model(split, set_size, epochs, batch_size, l1_norm_weight):
+def train_top_model(split, nb_samples, epochs, batch_size, l1_norm_weight):
     
     nb_training_features, nb_test_features, train_features_path,\
-    test_features_path = get_training_validation_features(split, set_size)
+    test_features_path = get_training_validation_features(split, nb_samples)
     
     log_path, weights_path = create_log_weights_file_paths()
         
-    _, weights_file_name = create_log_weights_file_names(set_size)
+    _, weights_file_name = create_log_weights_file_names(nb_samples//2)
 
     train_data = np.load(open(train_features_path + 'bottleneck_features_train','rb'))
     train_labels = np.array(
@@ -331,18 +332,18 @@ def train_top_model(split, set_size, epochs, batch_size, l1_norm_weight):
                                                    verbose=1, save_best_only=True, 
                                                    save_weights_only=True)
 
-    tensorboard = TensorBoard(log_dir = log_path + '/tensorboard',
-                              histogram_freq = 1, 
-                              write_graph = True, 
-                              write_images = True)
+#    tensorboard = TensorBoard(log_dir = log_path + '/tensorboard',
+#                              histogram_freq = 1, 
+#                              write_graph = True, 
+#                              write_images = True)
 
 
     model.fit(train_data, train_labels,
               epochs=epochs,
               batch_size=batch_size,
               validation_data=(validation_data, validation_labels),
-#              callbacks = [checkpointer])
-              callbacks = [checkpointer, tensorboard])
+              callbacks = [checkpointer])
+#              callbacks = [checkpointer, tensorboard])
 
 
 def retrain_vgg_network():    
@@ -422,11 +423,12 @@ def Main():
     
     write_hyperparameters_to_json(set_size)
     
-    epochs, epochs2, batch_size, l1_norm_weight = read_hyperparameters_from_json(set_size)
+    nb_samples, epochs, epochs2, batch_size, l1_norm_weight\
+    = read_hyperparameters_from_json(set_size)
 
-#    save_bottleneck_features(train_test_split, set_size, batch_size)
+    save_bottleneck_features(train_test_split, nb_samples, batch_size)
     
-    train_top_model(train_test_split, set_size, epochs, batch_size, l1_norm_weight)
+    train_top_model(train_test_split, nb_samples, epochs, batch_size, l1_norm_weight)
 
     
     return
