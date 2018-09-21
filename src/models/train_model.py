@@ -29,7 +29,7 @@ from keras import applications, optimizers, regularizers
 from keras.callbacks import ModelCheckpoint
 
 from keras.models import Sequential, Model
-from keras.layers import Dense, Dropout, Flatten, Conv2D, Input
+from keras.layers import Dense, Dropout, Flatten, Input
 from keras.applications.vgg16 import VGG16 
 
 from keras.preprocessing.image import ImageDataGenerator
@@ -93,12 +93,13 @@ def generate_target_train_test_directories(set_size):
     copied train/test split files    
     """
 
-    target_list = ['data/processed/set_size_' + str(set_size) + '_train',\
-                   'data/processed/set_size_' + str(set_size) + '_test',\
-                   'data/processed/set_size_' + str(set_size) + '_train/' + 'MS157',\
-                   'data/processed/set_size_' + str(set_size) + '_test/' + 'MS157',\
-                   'data/processed/set_size_' + str(set_size) + '_train/' + 'CLaMM',\
-                   'data/processed/set_size_' + str(set_size) + '_test/' + 'CLaMM']
+    target_list = ['data/processed/set_size_' + str(set_size),\
+                   'data/processed/set_size_' + str(set_size) + '/train',\
+                   'data/processed/set_size_' + str(set_size) + '/test',\
+                   'data/processed/set_size_' + str(set_size) + '/train/' + 'MS157',\
+                   'data/processed/set_size_' + str(set_size) + '/test/' + 'MS157',\
+                   'data/processed/set_size_' + str(set_size) + '/train/' + 'CLaMM',\
+                   'data/processed/set_size_' + str(set_size) + '/test/' + 'CLaMM']
     
     train_test_directories = []
     for extension in target_list:
@@ -129,7 +130,7 @@ def do_train_test_split(split, set_size):
         # copy files to train and test directories
         for i in range(4):
             for filename in file_locations[i]:
-                shutil.copy2(filename, path_list[i+2])
+                shutil.copy2(filename, path_list[i+3])
                 print("File named {} copied to directory {}".format(filename, 
                       file_locations[i]))
 
@@ -236,10 +237,10 @@ def get_training_validation_features(train_test_split, set_size):
     root_path = Path.cwd()
 
     train_features_path = str(root_path.parent.parent) + '/data/processed/' + 'set_size_'\
-    + str(set_size) + '_train/'
+    + str(set_size) + '/train/'
 
     test_features_path = str(root_path.parent.parent) + '/data/processed/' + 'set_size_'\
-    + str(set_size) + '_test/'
+    + str(set_size) + '/test/'
     
     return nb_training_features, nb_test_features, train_features_path, test_features_path
 
