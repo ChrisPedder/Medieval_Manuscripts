@@ -26,7 +26,7 @@ import glob
 # Machine learning libraries
 import keras
 from keras import applications, optimizers, regularizers
-from keras.callbacks import ModelCheckpoint
+from keras.callbacks import ModelCheckpoint, TensorBoard
 
 from keras.models import Sequential, Model
 from keras.layers import Dense, Dropout, Flatten, Input
@@ -154,7 +154,7 @@ def get_date_string():
     date_string = str(day) + '_' + str(month) + '_' + str(year)
     return date_string
 
-def create_logfile_name(set_size):
+def create_log_weights_file_names(set_size):
     
     date = get_date_string()
     
@@ -162,15 +162,30 @@ def create_logfile_name(set_size):
     str(epochs) + '_e2_' + str(epochs2) + '_bs_' + str(batch_size) +\
     '_l1_' + str(l1_norm_weight) + '_' + date
     
-    return log_file_name
+    weight_file_name = 'weights' + '_setsize_' + str(set_size) + '_e1_' +\
+    str(epochs) + '_e2_' + str(epochs2) + '_bs_' + str(batch_size) +\
+    '_l1_' + str(l1_norm_weight) + '_' + date
+    
+    return log_file_name, weight_file_name
 
-def create_logfile_path():
+def create_log_weights_file_paths():
     
     root_path = Path.cwd()
     
-    log_path = str(root_path.parent.parent) + '/models/logfiles/'
+    date = get_date_string()
     
-    return log_path
+    run_path = str(root_path.parent.parent) + '/models/' + date 
+    
+    log_path = str(root_path.parent.parent) + '/models/' + date + '/logfiles/'
+    
+    weight_path = str(root_path.parent.parent) + '/models/' + date + '/weightfiles/'
+
+    for path in [run_path, log_path, weight_path]:
+        #check output directory exists, if not create it
+        if not os.path.exists(path):
+            os.mkdir(path)    
+
+    return log_path, weight_path
 
     
 def write_hyperparameters_to_json(set_size):
@@ -181,13 +196,9 @@ def write_hyperparameters_to_json(set_size):
     hyperparams_dictionary['batch_size'] = batch_size
     hyperparams_dictionary['l1_norm_weight'] = l1_norm_weight
     
-    log_path = create_logfile_path()
-
-    #check output directory exists, if not create it
-    if not os.path.exists(log_path):
-        os.mkdir(log_path)
+    log_path = create_log_weights_file_paths()[0]
         
-    log_file_name = create_logfile_name(set_size)
+    log_file_name = create_log_weights_file_names(set_size)[0]
     
     write_JSON_file(log_path, log_file_name, hyperparams_dictionary)
     
@@ -197,9 +208,9 @@ def write_hyperparameters_to_json(set_size):
     
 def read_hyperparameters_from_json(set_size):
     
-    log_file_path = create_logfile_path()
+    log_file_path = create_log_weights_file_paths()[0]
     
-    log_file_name = create_logfile_name(set_size)
+    log_file_name = create_log_weights_file_names(set_size)[0]
     
     with open(log_file_path + log_file_name + '.json') as f:
         data = json.load(f)
@@ -212,19 +223,6 @@ def read_hyperparameters_from_json(set_size):
     return epochs, epochs2, batch_size, l1_norm_weight
     
 ### Start deep learning
-
-# path to the model weights files.
-#root_path = Path.cwd()
-#weights_path = str(root_path.parent.parent)+'/data/vgg16_weights.h5'
-#train_bottleneck_features_path = str(root_path.parent.parent) + '/data/processed/' + 'set_size_'\
-#+ str(set_size) + '_train'
-#top_model_weights_path = str(root_path)+'/data/bottleneck_fc_model.h5'
-
-# Training and testing data directories
-#train_data_dir = str(root_path)+'/data/processed/train'
-#validation_data_dir = str(root_path)+'/data/processed/test'
-
-# Train small network on top of VGG16
 
 # Save files containing the feature map data for training and test sets from running VGG16
 def get_training_validation_features(train_test_split, set_size):
@@ -295,6 +293,8 @@ def save_bottleneck_features(split, set_size, batch_size):
               size. Using previously created version')
 
 
+# Build small classifier network to sit on top of VGG16
+
 def build_classifier_model(data_shape, l1_norm_weight):
     model = Sequential()
     model.add(Flatten(input_shape=data_shape))
@@ -308,6 +308,10 @@ def train_top_model(split, set_size, epochs, batch_size, l1_norm_weight):
     
     nb_training_features, nb_test_features, train_features_path,\
     test_features_path = get_training_validation_features(split, set_size)
+    
+    log_path, weights_path = create_log_weights_file_paths()
+        
+    _, weights_file_name = create_log_weights_file_names(set_size)
 
     train_data = np.load(open(train_features_path + 'bottleneck_features_train','rb'))
     train_labels = np.array(
@@ -322,21 +326,24 @@ def train_top_model(split, set_size, epochs, batch_size, l1_norm_weight):
     model.compile(optimizer='rmsprop',
                   loss='binary_crossentropy', metrics=['accuracy'])
 
-    checkpointer = keras.callbacks.ModelCheckpoint(top_model_weights_path, monitor='val_acc', 
+    checkpointer = keras.callbacks.ModelCheckpoint(weights_path + weights_file_name, 
+                                                   monitor='val_acc', 
                                                    verbose=1, save_best_only=True, 
                                                    save_weights_only=True)
-    
-    tensorboard = TensorBoard(log_dir="logs/{}".format(time()))
+
+    tensorboard = TensorBoard(log_dir = log_path + '/tensorboard',
+                              histogram_freq = 1, 
+                              write_graph = True, 
+                              write_images = True)
 
 
     model.fit(train_data, train_labels,
               epochs=epochs,
               batch_size=batch_size,
               validation_data=(validation_data, validation_labels),
+#              callbacks = [checkpointer])
               callbacks = [checkpointer, tensorboard])
 
-#save_bottleneck_features()
-#train_top_model()
 
 def retrain_vgg_network():    
     input_tensor = Input(shape=(300,300,3))
@@ -417,9 +424,9 @@ def Main():
     
     epochs, epochs2, batch_size, l1_norm_weight = read_hyperparameters_from_json(set_size)
 
-    save_bottleneck_features(train_test_split, set_size, batch_size)
+#    save_bottleneck_features(train_test_split, set_size, batch_size)
     
-    train_top_model(split, set_size, epochs, batch_size, l1_norm_weight)
+    train_top_model(train_test_split, set_size, epochs, batch_size, l1_norm_weight)
 
     
     return
