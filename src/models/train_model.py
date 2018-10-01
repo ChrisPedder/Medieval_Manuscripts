@@ -226,9 +226,9 @@ def read_hyperparameters_from_json(set_size):
 # Save files containing the feature map data for training and test sets from running VGG16
 def get_training_validation_features(train_test_split, nb_samples):
     
-    nb_training_features = round((1-train_test_split) * nb_samples)
+    nb_training_features = int((1-train_test_split) * nb_samples)
     
-    nb_test_features = nb_samples - nb_training_features
+    nb_test_features = int(nb_samples - nb_training_features)
     
     # path to the model weights files.
     root_path = Path.cwd()
@@ -252,7 +252,7 @@ def save_bottleneck_features(split, nb_samples, batch_size):
     nb_training_features, nb_test_features, train_features_path,\
     test_features_path = get_training_validation_features(split, nb_samples)
     
-    if not any(fname.endswith('.npy') for fname in os.listdir(train_features_path)):
+    if not any('bottleneck' in fname for fname in os.listdir(train_features_path)):
         # Augmentation generator using flow_from_directory
         generator = datagen.flow_from_directory(
                 train_features_path,
@@ -271,7 +271,7 @@ def save_bottleneck_features(split, nb_samples, batch_size):
         print('Bottleneck training set features already saved for this sample\
               size. Using previously created version')
         
-    if not any(fname.endswith('.npy') for fname in os.listdir(test_features_path)):
+    if not any('bottleneck' in fname for fname in os.listdir(test_features_path)):
 
         generator = datagen.flow_from_directory(
                 test_features_path,
@@ -324,7 +324,9 @@ def train_top_model(split, nb_samples, epochs, batch_size, l1_norm_weight):
 
     model.compile(optimizer='rmsprop',
                   loss='binary_crossentropy', metrics=['accuracy'])
-
+    
+    print(nb_training_features, nb_test_features)
+    
     checkpointer = keras.callbacks.ModelCheckpoint(weights_path + weights_file_name, 
                                                    monitor='val_acc', 
                                                    verbose=1, save_best_only=True, 
@@ -394,8 +396,10 @@ def retrain_vgg_network(split, nb_samples, batch_size, l1_norm_weight, epochs2):
             batch_size=batch_size,
             class_mode='binary') 
 
-    checkpointer = ModelCheckpoint(filepath=weights_path + weights_file_name + 'retrained', verbose=1, 
-                                   monitor='val_acc', save_best_only=True)
+    checkpointer = ModelCheckpoint(filepath=weights_path + weights_file_name + 'retrained', 
+                                   verbose=1, 
+                                   monitor='val_acc', 
+                                   save_best_only=True)
 
     # fine-tune the model
     model.fit_generator(
@@ -431,6 +435,8 @@ def Main():
     
     nb_samples, epochs, epochs2, batch_size, l1_norm_weight\
     = read_hyperparameters_from_json(set_size)
+
+    print(get_training_validation_features(train_test_split, nb_samples))
 
     save_bottleneck_features(train_test_split, nb_samples, batch_size)
     
