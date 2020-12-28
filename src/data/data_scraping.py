@@ -19,12 +19,43 @@ import time
 # Import URL handling libraries
 from bs4 import BeautifulSoup
 import urllib3
-from urllib.request import urlretrieve
 import requests as requests
 
 # import argparse to handle user input
 import argparse
+import zipfile, urllib.request, shutil
 
+
+def download_extract_clamm_data():
+    url = 'http://clamm.irht.cnrs.fr/wp-content/uploads/ICFHR2016_CLaMM_Training.zip'
+    
+    root_path = Path.cwd()
+    clamm_data_directory = str(root_path.parent.parent) + '/data/raw/'
+    
+    filename = 'ICFHR2016_CLaMM_Training.zip'
+    dest_dir = str(root_path.parent.parent) + '/data/raw/ICDAR2017_CLaMM_Training/'
+    if not os.path.exists(dest_dir):
+        os.mkdir(dest_dir)
+
+    print(clamm_data_directory, dest_dir)
+    
+    with urllib.request.urlopen(url) as response, open(clamm_data_directory + filename, 'wb') as out_file:
+        shutil.copyfileobj(response, out_file)
+        with zipfile.ZipFile(out_file) as zf:
+            zf.extractall(dest_dir)
+            
+def extract_clamm_data():
+    root_path = Path.cwd()
+    clamm_data_directory = str(root_path.parent.parent) + '/data/raw/'
+    
+    filename = 'ICFHR2016_CLaMM_Training.zip'
+    dest_dir = str(root_path.parent.parent) + '/data/raw/ICDAR2017_CLaMM_Training/'
+    out_file = clamm_data_directory + filename
+
+    with zipfile.ZipFile(out_file) as zf:
+        zf.extractall(dest_dir)
+
+            
 # use this image scraper from the location where you want to save images
 # Used to retrieve jpg image files from http://image.ox.ac.uk/images/corpus/**
 # Uses random exponential backoff to prevent server overload
@@ -84,13 +115,16 @@ def download_images_to_directory(url_list, directory_extension = 'data/raw',
     return 
 
 def Main():
+    # Dowload CLaMM dataset to raw data folder
+    download_extract_clamm_data()    
+    # Extract CLaMM tiff files from zip file to local folder
+
     # Define url to download images from
     parser = argparse.ArgumentParser()
     parser.add_argument('url', help='The URL from which you want to\
                         download documents', type=str)
     parser.add_argument('file_extension', help='The type of file you want to\
                         download from the specified URL', type=str)
-
 
     args = parser.parse_args()
 
@@ -105,5 +139,3 @@ def Main():
 
 if __name__ == '__main__':
     Main()
-
-
