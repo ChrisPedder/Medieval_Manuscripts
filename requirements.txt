@@ -1,4 +1,4 @@
 numpy==1.19.2
 tensorflow==2.4.0
 keras==2.4.0
-Pillow==7.0.0
+Pillow==7.1.0
