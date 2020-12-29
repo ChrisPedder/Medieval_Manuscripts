@@ -6,446 +6,181 @@ Created on Fri Aug 10 11:07:05 2018
 @author: chrispedder
 """
 
-# Scientific computing libraries
 import numpy as np
-import random
-
-# File IO libraries
-from pathlib import Path
-import sys
 import os
-#sys.path.append("..")
 import argparse
-
-# logging libraries
 import json
-import datetime
-import shutil
-import glob
-
-# Machine learning libraries
-import keras
-from keras import applications, optimizers, regularizers
-from keras.callbacks import ModelCheckpoint
-from keras.models import Sequential, Model
-from keras.layers import Dense, Dropout, Flatten, Input
-from keras.applications.vgg16 import VGG16
-from keras.preprocessing.image import ImageDataGenerator
-
-IM_HEIGHT = 300
-IM_WIDTH = 300
-
-# Set random seed to get the same train-test split when run
-SEED = 42
-random.seed(SEED)
-
-# User-defined model hyperparameters
-EPOCHS = 150
-EPOCHS2 = 10
-BATCH_SIZE = 40
-L1_NORM_WEIGHT = 0.0001
-
-### Do train/test split of dataset for training purposes, retain specific
-### split used for future use/investigation
-
-def generate_train_test_split_files(train_test_split, set_size):
-    # Set size of train-test split
-    split = round((1-train_test_split) * set_size)
-
-    # get list of files in the raw data directory
-    root = Path.cwd()
-    MS_folder = str(root.parent.parent) + '/' + 'Projects/Medieval_Manuscripts/data/interim/MS157' + '/'
-    CLaMM_folder = str(root.parent.parent) + '/' + 'Projects/Medieval_Manuscripts/data/interim/CLaMM' + '/'
-
-    # take random sample of size SET_SIZE from examples
-    MS_sample_list = random.sample(glob.glob(MS_folder + '/*'), set_size)
-    CLaMM_sample_list = random.sample(glob.glob(CLaMM_folder + '/*'),
-                                     set_size)
-
-    MS_tr_files = []
-    CLaMM_tr_files = []
-    for i in range(split):
-        MS_tr_files.append(MS_sample_list[i])
-        CLaMM_tr_files.append(CLaMM_sample_list[i])
-
-    MS_te_files = []
-    CLaMM_te_files = []
-    for i in range(split,set_size):
-        MS_te_files.append(MS_sample_list[i])
-        CLaMM_te_files.append(CLaMM_sample_list[i])
-
-    return [MS_tr_files, MS_te_files, CLaMM_tr_files, CLaMM_te_files]
-
-def add_path(string):
-    """
-    Helper function for following routine to generate list of train/test
-    target directories required by Keras...
-    """
-    root = Path.cwd()
-    top_path = str(root.parent.parent)
-    return top_path + '/' + string + '/'
-
-def generate_target_train_test_directories(set_size):
-    """
-    Create set of routines for making a list of the target directories for
-    copied train/test split files
-    """
-
-    target_list = ['data/processed/set_size_' + str(set_size),\
-                   'data/processed/set_size_' + str(set_size) + '/train',\
-                   'data/processed/set_size_' + str(set_size) + '/test',\
-                   'data/processed/set_size_' + str(set_size) + '/train/' + 'MS157',\
-                   'data/processed/set_size_' + str(set_size) + '/test/' + 'MS157',\
-                   'data/processed/set_size_' + str(set_size) + '/train/' + 'CLaMM',\
-                   'data/processed/set_size_' + str(set_size) + '/test/' + 'CLaMM']
-
-    train_test_directories = []
-    for extension in target_list:
-        train_test_directories.append(add_path(extension))
-
-    return train_test_directories
-
-def do_train_test_split(split, set_size):
-    """
-    Do train-test split of data into subfolders required for Keras
-    retraining format.
-    """
-    import ipdb; ipdb.set_trace()
-    file_locations = generate_train_test_split_files(split, set_size)
-
-    # generate list of target directories to copy files to
-    path_list = generate_target_train_test_directories(set_size)
-
-    if all(os.path.exists(x) for x in path_list):
-        print('Train test split already exists for this set size. Using existing split...')
-        return
-
-    else:
-        #check chosen directory exists, if not create it
-        for path in path_list:
-            os.mkdir(path)
-
-        # copy files to train and test directories
-        for i in range(4):
-            for filename in file_locations[i]:
-                shutil.copy2(filename, path_list[i+3])
-                print("File named {} copied to directory {}".format(filename,
-                      file_locations[i]))
-
-        return
-
-# Keep record of all hyperparameters in JSON file. First write JSON from input
-# parameters, then read in to set values for deep learning to ensure no
-# errors/contamination
-
-# Write model hyperparameters to file
-def write_JSON_file(path, filename, data):
-    filepath = path + '/' + filename + '.json'
-    with open(filepath, 'w') as fp:
-        json.dump(data, fp)
-
-def get_date_string():
-    now = datetime.datetime.now()
-    year = now.year
-    month = now.month
-    day = now.day
-    date_string = str(day) + '_' + str(month) + '_' + str(year)
-    return date_string
-
-def create_log_weights_file_names(set_size):
-
-    date = get_date_string()
-
-    log_file_name = 'logfile' + '_setsize_' + str(set_size) + '_e1_' +\
-    str(EPOCHS) + '_e2_' + str(EPOCHS2) + '_bs_' + str(BATCH_SIZE) +\
-    '_l1_' + str(L1_NORM_WEIGHT) + '_' + date
-
-    weight_file_name = 'weights' + '_setsize_' + str(set_size) + '_e1_' +\
-    str(EPOCHS) + '_e2_' + str(EPOCHS2) + '_bs_' + str(BATCH_SIZE) +\
-    '_l1_' + str(L1_NORM_WEIGHT) + '_' + date
-
-    return log_file_name, weight_file_name
-
-def create_log_weights_file_paths():
-
-    root_path = Path.cwd()
-
-    date = get_date_string()
-
-    run_path = str(root_path.parent.parent) + '/models/' + date
-
-    log_path = str(root_path.parent.parent) + '/models/' + date + '/logfiles/'
-
-    weight_path = str(root_path.parent.parent) + '/models/' + date + '/weightfiles/'
-
-    for path in [run_path, log_path, weight_path]:
-        #check output directory exists, if not create it
-        if not os.path.exists(path):
-            os.mkdir(path)
-
-    return log_path, weight_path
-
-
-def write_hyperparameters_to_json(set_size):
-    hyperparams_dictionary = {}
-    hyperparams_dictionary['nb_training_samples'] = 2 * set_size
-    hyperparams_dictionary['epochs'] = EPOCHS
-    hyperparams_dictionary['epochs_2'] = EPOCHS2
-    hyperparams_dictionary['batch_size'] = BATCH_SIZE
-    hyperparams_dictionary['l1_norm_weight'] = L1_NORM_WEIGHT
-
-    log_path = create_log_weights_file_paths()[0]
-
-    log_file_name = create_log_weights_file_names(set_size)[0]
-
-    write_JSON_file(log_path, log_file_name, hyperparams_dictionary)
-
-    print('Run hyperparameters written to JSON file: {}'.format(log_file_name))
-
-    return
-
-def read_hyperparameters_from_json(set_size):
-
-    log_file_path = create_log_weights_file_paths()[0]
-
-    log_file_name = create_log_weights_file_names(set_size)[0]
-
-    with open(log_file_path + log_file_name + '.json') as f:
-        data = json.load(f)
-
-    nb_samples = data['nb_training_samples']
-    epochs = data['epochs']
-    epochs2 = data['epochs_2']
-    batch_size = data['batch_size']
-    l1_norm_weight = data['l1_norm_weight']
-
-    return nb_samples, epochs, epochs2, batch_size, l1_norm_weight
-
-### Start deep learning
-
-# Save files containing the feature map data for training and test sets from running VGG16
-def get_training_validation_features(train_test_split, nb_samples):
-
-    nb_training_features = int((1-train_test_split) * nb_samples)
-
-    nb_test_features = int(nb_samples - nb_training_features)
-
-    # path to the model weights files.
-    root_path = Path.cwd()
-
-    train_features_path = str(root_path.parent.parent) + '/data/processed/' + 'set_size_'\
-    + str(nb_samples//2) + '/train/'
-
-    test_features_path = str(root_path.parent.parent) + '/data/processed/' + 'set_size_'\
-    + str(nb_samples//2) + '/test/'
-
-    return nb_training_features, nb_test_features, train_features_path, test_features_path
-
-def save_bottleneck_features(split, nb_samples, batch_size):
-
-    # Data augmentation using affine transformations etc.
-    datagen = ImageDataGenerator(rescale=1. / 255)
-
-    # build the VGG16 network with false colour start
-    model = applications.VGG16(weights='imagenet', include_top=False)
-
-    nb_training_features, nb_test_features, train_features_path,\
-    test_features_path = get_training_validation_features(split, nb_samples)
-
-    if not any('bottleneck' in fname for fname in os.listdir(train_features_path)):
-        # Augmentation generator using flow_from_directory
-        generator = datagen.flow_from_directory(
-                train_features_path,
-                target_size=(IM_HEIGHT, IM_WIDTH),
-                batch_size=batch_size,
-                class_mode=None,
-                shuffle=False)
-        bottleneck_features_train = model.predict_generator(
-                generator, nb_training_features // batch_size)
-
-        # Save bottleneck features for training images so we don't have to rerun VGG16
-        np.save(open(train_features_path + 'bottleneck_features_train','wb'),
-                bottleneck_features_train)
-
-    else:
-        print('Bottleneck training set features already saved for this sample\
-              size. Using previously created version')
-
-    if not any('bottleneck' in fname for fname in os.listdir(test_features_path)):
-
-        generator = datagen.flow_from_directory(
-                test_features_path,
-                target_size=(IM_HEIGHT, IM_WIDTH),
-                batch_size=batch_size,
-                class_mode=None,
-                shuffle=False)
-
-        bottleneck_features_test = model.predict_generator(
-                generator, nb_test_features // batch_size)
-
-        # Save bottleneck features for training images so we don't have to rerun VGG16
-        np.save(open(test_features_path + 'bottleneck_features_test','wb'),
-                bottleneck_features_test)
-
-    else:
-        print('Bottleneck test set features already saved for this sample\
-              size. Using previously created version')
-
-
-# Build small classifier network to sit on top of VGG16
-
-def build_classifier_model(data_shape, l1_norm_weight):
-    model = Sequential()
-    model.add(Flatten(input_shape=data_shape))
-    model.add(Dense(256, activation='relu',
-                    kernel_regularizer=regularizers.l1(l1_norm_weight)))
-    model.add(Dropout(0.5))
-    model.add(Dense(1, activation='sigmoid'))
-    return model
-
-# Train small discriminator model on the feature maps from VGG16 saved above
-def train_top_model(split, nb_samples, epochs, batch_size, l1_norm_weight):
-
-    nb_training_features, nb_test_features, train_features_path,\
-    test_features_path = get_training_validation_features(split, nb_samples)
-
-    log_path, weights_path = create_log_weights_file_paths()
-
-    _, weights_file_name = create_log_weights_file_names(nb_samples//2)
-
-    train_data = np.load(open(train_features_path + 'bottleneck_features_train','rb'))
-    train_labels = np.array(
-        [0] * (nb_training_features // 2) + [1] * (nb_training_features // 2))
-
-    validation_data = np.load(open(test_features_path + 'bottleneck_features_test','rb'))
-    validation_labels = np.array(
-        [0] * (nb_test_features // 2) + [1] * (nb_test_features // 2))
-
-    model = build_classifier_model(train_data.shape[1:], l1_norm_weight)
-
-    model.compile(optimizer='rmsprop',
-                  loss='binary_crossentropy', metrics=['accuracy'])
-
-    print(nb_training_features, nb_test_features)
-
-    checkpointer = keras.callbacks.ModelCheckpoint(weights_path + weights_file_name,
-                                                   monitor='val_acc',
-                                                   verbose=1, save_best_only=True,
-                                                   save_weights_only=True)
-
-#    tensorboard = TensorBoard(log_dir = log_path + '/tensorboard',
-#                              histogram_freq = 1,
-#                              write_graph = True,
-#                              write_images = True)
-
-
-    model.fit(train_data, train_labels,
-              epochs=epochs,
-              batch_size=batch_size,
-              validation_data=(validation_data, validation_labels),
-              callbacks = [checkpointer])
-#              callbacks = [checkpointer, tensorboard])
-
-
-def retrain_vgg_network(split, nb_samples, batch_size, l1_norm_weight, epochs2):
-
-    nb_training_features, nb_test_features, train_features_path,\
-    test_features_path = get_training_validation_features(split, nb_samples)
-
-    log_path, weights_path = create_log_weights_file_paths()
-
-    _, weights_file_name = create_log_weights_file_names(nb_samples//2)
-
-    input_tensor = Input(shape=(IM_HEIGHT, IM_WIDTH, 3))
-    base_model = VGG16(weights='imagenet', include_top= False,
-                       input_tensor=input_tensor)
-    print('Model loaded.')
-
-    top_model = build_classifier_model(base_model.output_shape[1:], l1_norm_weight)
-    top_model.load_weights(weights_path + weights_file_name)
-
-    model = Model(input=base_model.input, output= top_model(base_model.output))
-
-    for layer in model.layers[:15]:
-        layer.trainable = False
-
-    print(model.summary())
-
-    ## compile the model with a SGD/momentum optimizer and a slow learning rate.
-    model.compile(loss='binary_crossentropy',
-                  optimizer=optimizers.SGD(lr=1e-4, momentum=0.9),
-                  metrics=['accuracy'])
-
-    # prepare data augmentation configuration
-    train_datagen = ImageDataGenerator(
-            rescale=1. / 255,
-            shear_range=0.2,
-            zoom_range=0.2,
-            horizontal_flip=False)
-
-    test_datagen = ImageDataGenerator(rescale=1. / 255)
-
-    train_generator = train_datagen.flow_from_directory(
-            train_features_path,
-            target_size=(IM_HEIGHT, IM_WIDTH),
-            batch_size=batch_size,
-            class_mode='binary')
-
-    validation_generator = test_datagen.flow_from_directory(
-            test_features_path,
-            target_size=(IM_HEIGHT, IM_WIDTH),
-            batch_size=batch_size,
-            class_mode='binary')
-
-    checkpointer = ModelCheckpoint(filepath=weights_path + weights_file_name + 'retrained',
-                                   verbose=1,
-                                   monitor='val_acc',
-                                   save_best_only=True)
-
-    # fine-tune the model
-    model.fit_generator(
-            train_generator,
-            steps_per_epoch = nb_training_features//batch_size,
-            epochs=epochs2,
-            validation_data = validation_generator,
-            verbose=1,
+import tensorflow as tf
+
+from abc import ABC, abstractmethod
+from datetime import datetime
+
+from .TFRecordsReader import TFRecordsReader
+from ..data.Predictors import (
+    predictors_options, VGG16Predictor, embedding_sizes)
+
+# Helper function for writing to JSON
+def jsonify(obj):
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.float32) or isinstance(obj, np.float64):
+        return float(obj)
+    elif isinstance(obj, np.int32) or isinstance(obj, np.int64):
+        return int(obj)
+    return obj
+
+class ModelTrainer(object):
+    def __init__(self, args):
+        self.args = args
+        self.model = self.build_model()
+        self.datasets = self.get_train_test_datasets()
+        self.predictor = predictors_options[args.embedding_model]
+
+    @abstractmethod
+    def build_model(self):
+        pass
+
+    @abstractmethod
+    def create_model_training_folder(self):
+        pass
+
+    def safe_folder_create(self, folder):
+        if not os.path.isdir(folder):
+            os.mkdir(folder)
+
+    @abstractmethod
+    def get_train_test_datasets(self):
+        pass
+
+    @abstractmethod
+    def write_config_to_json(self):
+        pass
+
+    @abstractmethod
+    def train(self):
+        pass
+
+    @abstractmethod
+    def predict(self, data):
+        pass
+
+class DeterministicModel(ModelTrainer):
+
+    def __init__(self, args):
+        self.epochs = args.epochs
+        self.batch_size = args.batch_size
+        self.dropout = args.dropout
+        self.log_dir = args.log_dir
+        self.embed_size = embedding_sizes[args.embedding_model]
+        self.hidden_size = args.hidden_size
+        super().__init__(args)
+
+    def create_model_training_folder(self):
+        # Check that top level log dir exists, if not, create it
+        self.safe_folder_create(self.log_dir)
+
+        # Next-level log dir based on date, if not already present, create it
+        now = datetime.now()
+        date = now.strftime("%d_%m_%Y")
+        date_dir = os.path.join(self.log_dir, date)
+        self.safe_folder_create(date_dir)
+
+        # Lowest-level log dir based on numbering, if date_dir not empty,
+        # check that the previous highest index was, and increment by one.
+        last_index = 0
+        if len(os.listdir(date_dir)) != 0:
+            subfolder_list = [x[0] for x in os.walk(date_dir) if os.path.isdir(x[0])]
+            last_index = max([int(x.split('_')[-1]) for x in subfolder_list[1:]])
+
+        model_dir = os.path.join(date_dir, 'model_' + str(last_index + 1))
+        self.safe_folder_create(model_dir)
+        return model_dir
+
+    def get_train_test_datasets(self):
+        reader = TFRecordsReader(self.args)
+        return reader.datasets
+
+    def build_model(self):
+        model = tf.keras.Sequential()
+        model.add(tf.keras.Input(shape=(self.embed_size,)))
+        model.add(tf.keras.layers.Dense(self.hidden_size, activation='relu'))
+        model.add(tf.keras.layers.Dropout(self.dropout))
+        model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
+        return model
+
+    def write_config_to_json(self):
+        args_dict = vars(self.args)
+        for key, value in args_dict.items():
+            args_dict[key] = jsonify(value)
+        json_path = os.path.join(self.logs_folder, 'config.json')
+        with open(json_path, 'w') as f:
+            json.dump(args_dict, f)
+        print(f'Config file written to {json_path}')
+
+    def train(self):
+        self.logs_folder = self.create_model_training_folder()
+        self.model.compile(optimizer='rmsprop',
+                           loss='binary_crossentropy',
+                           metrics=['accuracy'])
+
+        checkpointer = tf.keras.callbacks.ModelCheckpoint(
+            os.path.join(self.logs_folder, 'checkpoints'),
+            monitor='val_accuracy',
+            verbose=1, save_best_only=True,
+            save_weights_only=True)
+
+        # tensorboard = tf.keras.callbacks.TensorBoard(
+        #     log_dir = os.path.join(self.logs_folder, 'tensorboard'),
+        #     histogram_freq = 1,
+        #     write_graph = True,
+        #     write_images = True)
+
+        self.model.fit(
+            x=self.datasets['train'],
+            epochs=self.epochs,
+            batch_size=self.batch_size,
+            validation_data=self.datasets['test'],
             callbacks = [checkpointer])
+            # callbacks = [checkpointer, tensorboard])
 
-    return
+        self.write_config_to_json()
 
-def Main():
+    def predict(self, data):
+        args_copy = self.args
+        args_copy.batch_size = 1
+        pred = self.predictor(args_copy)
 
+        outputs = []
+        for entry in data:
+            embedding = pred.predict(entry)
+            out = self.model.predict(embedding)
+            outputs.append(out)
+        return outputs
+
+def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--split_size', help = 'The size of the holdout test set used\
-                        to quantify model performance as a fraction of the total\
-                        size of the training set', type = float)
-
-    parser.add_argument('--set_size', help = 'The number of images from each\
-                        training set to use. NB set_size * split_size should\
-                        be chosen to be exactly divisible by two!', type = int)
-
-
+    parser.add_argument('--batch_size', help='The size of the batches to use '
+                        'when training the models', type=int,
+                        default=32)
+    parser.add_argument('--embedding_model', help='which embeddings to '
+                        'use when training the model', type=str,
+                        default='vgg16')
+    parser.add_argument('--data_dir', help='Path to the data',
+                        type=str, required=True)
+    parser.add_argument('--epochs', help='How many epochs to train the model '
+                        'for.', type=int, default=50)
+    parser.add_argument('--dropout', help='How much dropout to apply to model ',
+                        type=float, default=0.5)
+    parser.add_argument('--log_dir', help='Where to save model weights and '
+                        'config.', type=str, required=True)
+    parser.add_argument('--hidden_size', help='What hidden sizes to use in '
+                        'model.', type=int, default=256)
+    parser.add_argument('--learning_rate', help='What learning rate to use in '
+                        'training the model.', type=float, default=0.001)
     args = parser.parse_args()
-
-    train_test_split = args.split_size
-    set_size = args.set_size
-
-    do_train_test_split(train_test_split, set_size)
-
-    write_hyperparameters_to_json(set_size)
-
-    nb_samples, epochs, epochs2, batch_size, l1_norm_weight\
-    = read_hyperparameters_from_json(set_size)
-
-    print(get_training_validation_features(train_test_split, nb_samples))
-
-    save_bottleneck_features(train_test_split, nb_samples, batch_size)
-
-    train_top_model(train_test_split, nb_samples, epochs, batch_size,
-                    l1_norm_weight)
-
-    retrain_vgg_network(train_test_split, nb_samples, batch_size,
-                        l1_norm_weight, epochs2)
+    return args
 
 if __name__ == '__main__':
-    Main()
+    args = parse_args()
+    model = DeterministicModel(args)
+    model.train()

@@ -8,8 +8,6 @@ import numpy as np
 
 from abc import ABC, abstractmethod
 
-predictors_options = {'vgg16': VGG16Predictor}
-
 class Predictor(object):
     def __init__(self, args):
         self.batch_size = args.batch_size
@@ -34,3 +32,6 @@ class VGG16Predictor(Predictor):
             pooling='max'
         )
         return base_model
+
+predictors_options = {'vgg16': VGG16Predictor}
+embedding_sizes = {'vgg16': 512}
