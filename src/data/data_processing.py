@@ -57,7 +57,8 @@ class ImageProcessor(object):
         # factor of 1.7
         self.SCALE = 1.7
 
-        # Set size of training tiles here
+        # Set size of training tiles here (we could pick 224*224 to match the
+        # expected input size of VGG16 here too)
         self.IM_HEIGHT = 300
         self.IM_WIDTH = 300
 

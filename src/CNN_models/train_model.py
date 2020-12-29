@@ -297,7 +297,8 @@ def save_bottleneck_features(split, nb_samples, batch_size):
 def build_classifier_model(data_shape, l1_norm_weight):
     model = Sequential()
     model.add(Flatten(input_shape=data_shape))
-    model.add(Dense(256, activation='relu', kernel_regularizer=regularizers.l1(l1_norm_weight)))
+    model.add(Dense(256, activation='relu',
+                    kernel_regularizer=regularizers.l1(l1_norm_weight)))
     model.add(Dropout(0.5))
     model.add(Dense(1, activation='sigmoid'))
     return model
@@ -363,7 +364,7 @@ def retrain_vgg_network(split, nb_samples, batch_size, l1_norm_weight, epochs2):
     top_model = build_classifier_model(base_model.output_shape[1:], l1_norm_weight)
     top_model.load_weights(weights_path + weights_file_name)
 
-    model = Model(input= base_model.input, output= top_model(base_model.output))
+    model = Model(input=base_model.input, output= top_model(base_model.output))
 
     for layer in model.layers[:15]:
         layer.trainable = False
@@ -445,8 +446,6 @@ def Main():
 
     retrain_vgg_network(train_test_split, nb_samples, batch_size,
                         l1_norm_weight, epochs2)
-
-    return
 
 if __name__ == '__main__':
     Main()
