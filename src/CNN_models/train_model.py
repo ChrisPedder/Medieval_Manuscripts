@@ -4,6 +4,11 @@
 Created on Fri Aug 10 11:07:05 2018
 
 @author: chrispedder
+
+To train the model, run from the top-level dir as:
+
+python3 -m src.CNN_models.train_model --args ...
+
 """
 
 import numpy as np
@@ -176,7 +181,7 @@ def parse_args():
     parser.add_argument('--hidden_size', help='What hidden sizes to use in '
                         'model.', type=int, default=256)
     parser.add_argument('--learning_rate', help='What learning rate to use in '
-                        'training the model.', type=float, default=0.001)
+                        'training the model.', type=float, default=0.0001)
     args = parser.parse_args()
     return args
 
