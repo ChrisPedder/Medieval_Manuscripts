@@ -26,45 +26,66 @@ from ..data.Predictors import (
 from .train_model import (jsonify, DeterministicModel, parse_args)
 
 tfd = tfp.distributions
+tfpl = tfp.layers
+
+def nll(y_true, y_pred):
+    """
+    This function should return the negative log-likelihood of each sample
+    in y_true given the predicted distribution y_pred. If y_true is of shape
+    [B, E] and y_pred has batch shape [B] and event_shape [E], the output
+    should be a Tensor of shape [B].
+    """
+    return -y_pred.log_prob(y_true)
+
+def normalize_img(image, label):
+    """Normalizes images: `uint8` -> `float32`."""
+    return tf.cast(image, tf.float32) / 255., label
+
+def one_hot_encode(image, label):
+    """One hot encodes labels: `int64` -> `[int64]`."""
+    return image, tf.one_hot(label, 2)
 
 class ProbabilisticModel(DeterministicModel):
+
+    def get_train_test_datasets(self):
+        reader = TFRecordsReader(self.args)
+        for key, value in reader.datasets.items():
+            value = value.map(
+                normalize_img, num_parallel_calls=tf.data.AUTOTUNE)
+            value = value.map(
+                one_hot_encode, num_parallel_calls=tf.data.AUTOTUNE)
+            reader.datasets[key] = value
+        return reader.datasets
 
     def build_model(self):
         """Creates a Keras model using the LeNet-5 architecture.
         Returns:
           model: Compiled Keras model.
         """
-        # KL divergence weighted by the number of training samples, using
-        # lambda function to pass as input to the kernel_divergence_fn on
-        # flipout layers.
-        kl_divergence_function = (lambda q, p, _: tfd.kl_divergence(q, p) /
-            tf.cast(15000, dtype=tf.float32))
 
         model = tf.keras.models.Sequential([
           tf.keras.Input(shape=(self.embed_size,)),
-          tfp.layers.DenseFlipout(
-              self.hidden_size, kernel_divergence_fn=kl_divergence_function,
-              activation=tf.nn.relu),
+          tf.keras.layers.Flatten(),
           tf.keras.layers.Dropout(self.dropout),
-          tfp.layers.DenseFlipout(
-              1, kernel_divergence_fn=kl_divergence_function,
-              activation=tf.nn.softmax)
+          tf.keras.layers.Dense(tfpl.OneHotCategorical.params_size(2)),
+          tfpl.OneHotCategorical(2, convert_to_tensor_fn=tfd.Distribution.mode)
         ])
+
         return model
 
     def train(self):
         self.logs_folder = self.create_model_training_folder()
         # Model compilation.
-        optimizer = tf.keras.optimizers.Adam(lr=self.args.learning_rate)
+        optimizer = tf.keras.optimizers.RMSprop()
         # We use the categorical_crossentropy loss since the MNIST dataset contains
         # ten labels. The Keras API will then automatically add the
         # Kullback-Leibler divergence (contained on the individual layers of
         # the model), to the cross entropy loss, effectively
         # calcuating the (negated) Evidence Lower Bound Loss (ELBO)
-        self.model.compile(optimizer, loss='binary_crossentropy',
+        self.model.compile(optimizer, loss=nll,
                       metrics=['accuracy'],
                       experimental_run_tf_function=False)
-
+        print(self.model.summary())
         checkpointer = tf.keras.callbacks.ModelCheckpoint(
             os.path.join(self.logs_folder, 'checkpoints'),
             monitor='val_accuracy',
@@ -179,5 +200,8 @@ class CompleteProbabilisticModel(DeterministicModel):
 
 if __name__ == '__main__':
     args = parse_args()
-    model = CompleteProbabilisticModel(args)
+    # model = CompleteProbabilisticModel(args)
+    # model.train()
+
+    model = ProbabilisticModel(args)
     model.train()
